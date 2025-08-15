@@ -3,6 +3,9 @@ import { Geist, Geist_Mono } from "next/font/google";
 import SessionWrapper from "@/components/SessionWrapper";
 import { ThemeProvider } from "@/components/theme-provider"
 import { siteConfig } from "@/config/site";
+import TopLoader from "@/components/TopLoaderWrapper";
+import { ModeToggle } from "@/components/ui/mode-toggle";
+
 import "./globals.css";
 
 const geistSans = Geist({
@@ -34,8 +37,12 @@ export default function RootLayout({
             attribute="class"
             defaultTheme="system"
             enableSystem
-          >
+          ><TopLoader>
+              <div className="absolute top-4 right-4 z-50">
+                <ModeToggle />
+              </div>
             {children}
+            </TopLoader>
         </ThemeProvider>
       </SessionWrapper>
       </body>
