@@ -2,7 +2,12 @@ import authOptions from "@/auth";
 import { getServerSession } from "next-auth/next";
 import { redirect } from "next/navigation";
 import SignOutButton from "@/components/ui/SignoutButton"; 
+import { siteConfig } from "@/config/site";
+import { Metadata } from "next";
 
+export const metadata:Metadata = {
+  title: `Sign In | ${siteConfig.name}`,
+};
 
 const ProfilePage = async () => {
   const session = await getServerSession(authOptions);

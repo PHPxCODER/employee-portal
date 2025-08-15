@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 const SignOutButton = () => {
 
   const handleSignOut = () => {
-    signOut({ callbackUrl: "/auth" }); // Redirect to auth page after sign out
+    signOut({ callbackUrl: "/" }); // Redirect to auth page after sign out
   };
 
   return (
