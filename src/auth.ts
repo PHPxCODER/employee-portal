@@ -1,6 +1,7 @@
 import CredentialsProvider from "next-auth/providers/credentials";
 import { authenticate } from "ldap-authentication";
 import type { NextAuthOptions, User } from "next-auth";
+import { prisma } from "@/lib/prisma";
 
 const authOptions: NextAuthOptions = {
   providers: [
@@ -41,85 +42,87 @@ const authOptions: NextAuthOptions = {
               "displayName",
               "distinguishedName",
               "memberOf",
-              "thumbnailPhoto", // User's profile picture (JPEG format)
-              "jpegPhoto", // Some AD setups might use this instead of thumbnailPhoto
+              "thumbnailPhoto",
+              "jpegPhoto",
             ],
           });
 
           console.log("LDAP User authenticated successfully.");
-          console.log("Retrieved LDAP User Attributes (partial):", {
-            cn: ldapUser.cn,
-            mail: ldapUser.mail,
-            displayName: ldapUser.displayName,
-            distinguishedName: ldapUser.distinguishedName,
-            memberOf: ldapUser.memberOf ? "found" : "not found",
-            thumbnailPhoto: ldapUser.thumbnailPhoto ? "found" : "not found",
-          });
 
+          // Process image if available
           let userImage: string | null = null;
-          // Check if thumbnailPhoto attribute exists and is a Buffer (binary data)
           if (
             ldapUser.thumbnailPhoto &&
             ldapUser.thumbnailPhoto instanceof Buffer
           ) {
             try {
-              // Convert the image Buffer to a Base64 string
-              // Prepend with data URI scheme: data:image/jpeg;base64,
-              // Assuming 'thumbnailPhoto' is typically a JPEG. If not, adjust 'image/jpeg'.
               userImage = `data:image/jpeg;base64,${ldapUser.thumbnailPhoto.toString(
                 "base64"
               )}`;
-              console.log(
-                "Thumbnail photo successfully converted to Base64 data URI."
-              );
-              // Log a snippet of the Base64 string for verification (do not log full string in production)
-              // console.log("Image Base64 Snippet:", userImage.substring(0, 100) + "...");
+              console.log("Thumbnail photo successfully converted to Base64 data URI.");
             } catch (bufferConversionError) {
               console.error(
                 "Error converting thumbnailPhoto Buffer to Base64:",
                 bufferConversionError
               );
-              userImage = null; // Set to null if conversion fails
+              userImage = null;
             }
-          } else if (ldapUser.thumbnailPhoto) {
-            // This case would indicate that thumbnailPhoto was returned, but not as a Buffer
-            console.warn(
-              "thumbnailPhoto attribute exists but is not a Buffer:",
-              typeof ldapUser.thumbnailPhoto
-            );
-            userImage = null;
-          } else {
-            console.log("No thumbnailPhoto found for this user in Active Directory.");
-            userImage = null; // No image found in AD
           }
+
+          // Create or update user in database
+          const dbUser = await prisma.user.upsert({
+            where: {
+              username: credentials.username,
+            },
+            update: {
+              email: ldapUser.mail || null,
+              name: ldapUser.displayName || ldapUser.cn,
+              distinguishedName: ldapUser.distinguishedName,
+              groups: Array.isArray(ldapUser.memberOf) ? ldapUser.memberOf : [],
+              lastLoginAt: new Date(),
+            },
+            create: {
+              username: credentials.username,
+              email: ldapUser.mail || null,
+              name: ldapUser.displayName || ldapUser.cn,
+              distinguishedName: ldapUser.distinguishedName,
+              groups: Array.isArray(ldapUser.memberOf) ? ldapUser.memberOf : [],
+              lastLoginAt: new Date(),
+              onboardingComplete: false, // New users need onboarding
+            },
+          });
+
+          // Log the login attempt
+          await prisma.auditLog.create({
+            data: {
+              userId: dbUser.id,
+              action: "login",
+              details: {
+                username: credentials.username,
+                loginMethod: "LDAP",
+                groups: dbUser.groups,
+              },
+            },
+          });
+
+          console.log("User created/updated in database:", dbUser.id);
 
           // Return the user object in the format NextAuth expects
           const user: User = {
-            id: ldapUser.cn, // Unique identifier for the user (NextAuth requires 'id')
-            name: ldapUser.displayName || ldapUser.cn, // User's display name
-            email: ldapUser.mail, // User's email
-            image: userImage, // The Base64 image data URI or null
-            username: credentials.username, // Custom field: sAMAccountName
-            dn: ldapUser.distinguishedName, // Custom field: Distinguished Name
-            groups: Array.isArray(ldapUser.memberOf)
-              ? ldapUser.memberOf
-              : [],
+            id: dbUser.id,
+            name: dbUser.name,
+            email: dbUser.email,
+            image: userImage,
+            username: credentials.username,
+            dn: ldapUser.distinguishedName,
+            groups: Array.isArray(ldapUser.memberOf) ? ldapUser.memberOf : [],
+            recoveryEmail: dbUser.recoveryEmail,
+            onboardingComplete: dbUser.onboardingComplete,
           };
-
-          console.log("User object prepared for NextAuth session:", {
-            id: user.id,
-            name: user.name,
-            email: user.email,
-            image: user.image ? "Image Data URI Present" : "No Image", // Avoid logging full image data
-            username: user.username,
-            dn: user.dn,
-            groups: user.groups,
-          });
 
           return user;
         } catch (error) {
           console.error("LDAP authentication failed:", error);
-          // More specific error messages for user feedback could be added here
           return null;
         }
       },
@@ -127,53 +130,33 @@ const authOptions: NextAuthOptions = {
   ],
 
   session: {
-    strategy: "jwt", // Use JWT for session management
+    strategy: "jwt",
   },
 
   callbacks: {
-    // The `jwt` callback is called whenever a JWT is created (on sign in)
-    // or updated (on subsequent requests if session strategy is jwt).
     async jwt({ token, user }) {
-      // `user` is only present on the first call (after `authorize` returns)
       if (user) {
         token.username = user.username;
         token.dn = user.dn;
         token.groups = user.groups;
-        token.picture = user.image; // Assign the image to the JWT token's 'picture' field
+        token.picture = user.image;
+        token.recoveryEmail = user.recoveryEmail;
+        token.onboardingComplete = user.onboardingComplete;
+        token.userId = user.id;
       }
-      console.log("JWT Callback - Token:", {
-        sub: token.sub,
-        name: token.name,
-        email: token.email,
-        picture: token.picture ? "Image Data URI Present" : "No Image",
-        username: token.username,
-        dn: token.dn,
-        groups: token.groups,
-      });
       return token;
     },
 
-    // The `session` callback is called whenever a session is checked
-    // (e.g., via `useSession` or `getSession`).
     async session({ session, token }) {
-      // Ensure session.user exists before assigning properties
       if (session.user) {
         session.user.username = token.username;
         session.user.dn = token.dn;
         session.user.groups = token.groups;
-        session.user.image = token.picture; // Assign the image from token to session user
+        session.user.image = token.picture;
+        session.user.recoveryEmail = token.recoveryEmail;
+        session.user.onboardingComplete = token.onboardingComplete;
+        session.user.id = token.userId;
       }
-      console.log("Session Callback - Session:", {
-        expires: session.expires,
-        user: {
-          name: session.user?.name,
-          email: session.user?.email,
-          image: session.user?.image ? "Image Data URI Present" : "No Image",
-          username: session.user?.username,
-          dn: session.user?.dn,
-          groups: session.user?.groups,
-        },
-      });
       return session;
     },
   },

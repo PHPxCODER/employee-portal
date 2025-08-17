@@ -4,9 +4,10 @@ import { redirect } from "next/navigation";
 import SignOutButton from "@/components/ui/SignoutButton"; 
 import { siteConfig } from "@/config/site";
 import { Metadata } from "next";
+import { prisma } from "@/lib/prisma";
 
-export const metadata:Metadata = {
-  title: `Sign In | ${siteConfig.name}`,
+export const metadata: Metadata = {
+  title: `Profile | ${siteConfig.name}`,
 };
 
 const ProfilePage = async () => {
@@ -14,6 +15,17 @@ const ProfilePage = async () => {
 
   if (!session || !session.user) {
     redirect("/");
+  }
+
+  // Check if user has recovery email set
+  const user = await prisma.user.findUnique({
+    where: { username: session.user.username },
+    select: { recoveryEmail: true }
+  });
+
+  // If no recovery email, redirect to onboarding
+  if (!user?.recoveryEmail) {
+    redirect("/onboarding");
   }
 
   return (
@@ -49,6 +61,11 @@ const ProfilePage = async () => {
               <strong>Username:</strong> {session.user.username}
             </p>
           )}
+          {user?.recoveryEmail && (
+            <p>
+              <strong>Recovery Email:</strong> {user.recoveryEmail}
+            </p>
+          )}
           {session.user.groups && session.user.groups.length > 0 && (
             <p>
               <strong>Groups:</strong>{" "}
@@ -60,7 +77,15 @@ const ProfilePage = async () => {
                 .join(", ")}
             </p>
           )}
-          <SignOutButton/>
+          <div className="pt-4 space-y-2">
+            <a 
+              href="/change-password" 
+              className="block w-full text-center bg-blue-600 text-white rounded-lg p-2 hover:bg-blue-700 transition-colors"
+            >
+              Change Password
+            </a>
+            <SignOutButton/>
+          </div>
         </div>
       </div>
     </div>

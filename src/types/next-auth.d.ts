@@ -10,6 +10,8 @@ declare module "next-auth" {
       username: string;
       dn: string;
       groups: string[];
+      recoveryEmail?: string | null;
+      onboardingComplete: boolean;
     };
   }
 
@@ -21,6 +23,8 @@ declare module "next-auth" {
     username: string;
     dn: string;
     groups: string[];
+    recoveryEmail?: string | null;
+    onboardingComplete: boolean;
   }
 }
 
@@ -29,5 +33,8 @@ declare module "next-auth/jwt" {
     username: string;
     dn: string;
     groups: string[];
+    recoveryEmail?: string | null;
+    onboardingComplete: boolean;
+    userId: string;
   }
 }
