@@ -1,4 +1,3 @@
-// src/app/profile/page.tsx
 "use client";
 
 import { useState, useEffect } from "react";
@@ -6,7 +5,6 @@ import { useSession } from "next-auth/react";
 import { redirect } from "next/navigation";
 import SignOutButton from "@/components/ui/SignoutButton";
 import ImageUpload from "@/components/ImageUpload";
-import { siteConfig } from "@/config/site";
 
 interface UserData {
   id: string;
