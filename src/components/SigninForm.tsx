@@ -13,15 +13,18 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Loader2 } from "lucide-react";
 
 export default function SigninPage() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    setLoading(true);
 
     const res = await signIn("credentials", {
       username,
@@ -34,6 +37,8 @@ export default function SigninPage() {
     } else {
       window.location.href = "/";
     }
+    
+    setLoading(false);
   };
 
   return (
@@ -84,8 +89,15 @@ export default function SigninPage() {
               />
             </div>
 
-            <Button type="submit" className="w-full">
-              Sign In
+            <Button type="submit" disabled={loading} className="w-full">
+              {loading ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Signing In...
+                </>
+              ) : (
+                "Sign In"
+              )}
             </Button>
           </form>
         </CardContent>
