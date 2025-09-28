@@ -50,7 +50,7 @@ export default function SigninPage() {
         setError("Username not found. Please check your username and try again.");
       }
     } catch (error) {
-      setError("Unable to verify username. Please try again.");
+      setError(error instanceof Error ? error.message : "An unexpected error occurred.");
     } finally {
       setLoading(false);
     }
@@ -79,7 +79,7 @@ export default function SigninPage() {
         }, 2000);
       }
     } catch (error) {
-      setError("An unexpected error occurred. Please try again.");
+      setError(error instanceof Error ? error.message : "An unexpected error occurred.");
       setStep("password");
     } finally {
       setLoading(false);
